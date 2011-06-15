@@ -1,8 +1,8 @@
 de:
     lizenzo_import_processing: 'Danke, ihr Import wurde in die Warteschlange gestellt. Sie erhalten eine E-Mail, sobald der Imprt abgeschlossen ist.'
-    lizenzo_import_index: 'Lizenzo Importer'
+    lizenzo_imports: 'Lizenzo Importer'
     form:
-        lizenzo_import:
+        lizenzo_importer:
             heading: 'Importiere Lizenzo Produkte aus einer CSV-Datei'
             new:
                 data_file: "CSV Datei"
