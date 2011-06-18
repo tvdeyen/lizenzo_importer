@@ -6,8 +6,8 @@ module LizenzoImporter
           @user = user
           @error_message = error_message
           attachments["lizenzo_importer.log"] = File.read(LIZENZO_IMPORTER_SETTINGS[:log_to]) if @error_message.nil?
-          mail(:to => @user.email, :subject => "Spree: Import Products #{error_message.nil? ? "Success" : "Failure"}")
-        end     
+          mail(:to => @user.email, :subject => "Spree: Lizenzo Importer #{error_message.nil? ? "Success" : "Failure"}")
+        end
       end
     end
   end

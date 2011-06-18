@@ -12,11 +12,11 @@ class Admin::LizenzoImportsController < Admin::BaseController
     @lizenzo_import = LizenzoImport.new
   end
   
-  
   def create
     @lizenzo_import = LizenzoImport.create(params[:lizenzo_import])
     Delayed::Job.enqueue LizenzoImporter::ImportJob.new(@lizenzo_import, @current_user)
     flash[:notice] = t('lizenzo_import_processing')
     render :new
   end
+  
 end

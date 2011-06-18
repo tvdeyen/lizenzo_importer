@@ -1,24 +1,24 @@
 # This model is the master routine for uploading products
 # Requires Paperclip and CSV to upload the CSV file and read it nicely.
 
-# Original Author:: Josh McArthur
-# Author:: Chetan Mittal
+# Original Authors:: Josh McArthur, Chetan Mittal
+# Author:: Thomas von Deyen
 # License:: MIT
 
 class LizenzoImport < ActiveRecord::Base
   has_attached_file :data_file, :path => ":rails_root/lib/etc/product_data/data-files/:basename.:extension"
   validates_attachment_presence :data_file
-
+  
   require 'csv'
   require 'pp'
   require 'open-uri'
-
+  
   ## Data Importing:
   # List Price maps to Master Price, Current MAP to Cost Price, Net 30 Cost unused
   # Width, height, Depth all map directly to object
   # Image main is created independtly, then each other image also created and associated with the product
   # Meta keywords and description are created on the product model
-
+  
   def import_data!
     begin
       #Get products *before* import -
@@ -28,8 +28,8 @@ class LizenzoImport < ActiveRecord::Base
         @names_of_products_before_import << product.name
       end
       log("#{@names_of_products_before_import}")
-            
-      rows = CSV.read(self.data_file.path)
+      
+      rows = CSV.read(self.data_file.path, {:col_sep => ';', :quote_char => "'"})
       
       if LIZENZO_IMPORTER_SETTINGS[:first_row_is_headings]
         col = get_column_mappings(rows[0])
@@ -40,7 +40,7 @@ class LizenzoImport < ActiveRecord::Base
       log("Importing products for #{self.data_file_file_name} began at #{Time.now}")
       rows[LIZENZO_IMPORTER_SETTINGS[:rows_to_skip]..-1].each do |row|
         product_information = {}
-
+        
         #Automatically map 'mapped' fields to a collection of product information.
         #NOTE: This code will deal better with the auto-mapping function - i.e. if there
         #are named columns in the spreadsheet that correspond to product
@@ -52,14 +52,14 @@ class LizenzoImport < ActiveRecord::Base
         
         #Manually set available_on if it is not already set
         product_information[:available_on] = DateTime.now - 1.day if product_information[:available_on].nil?
-
+        
         
         #Trim whitespace off the beginning and end of row fields
         row.each do |r|
           next unless r.is_a?(String)
           r.gsub!(/\A\s*/, '').chomp!
         end
-
+        
         if LIZENZO_IMPORTER_SETTINGS[:create_variants]
           field = LIZENZO_IMPORTER_SETTINGS[:variant_comparator_field].to_s
           if p = Product.find(:first, :conditions => ["#{field} = ?", row[col[field.to_sym]]])
@@ -73,23 +73,23 @@ class LizenzoImport < ActiveRecord::Base
           next unless create_product_using(product_information)
         end
       end
-
+      
       if LIZENZO_IMPORTER_SETTINGS[:destroy_original_products]
         @products_before_import.each { |p| p.destroy }
       end
-
+      
       log("Importing products for #{self.data_file_file_name} completed at #{DateTime.now}")
-
+      
     rescue Exception => exp
       log("An error occurred during import, please check file and try again. (#{exp.message})\n#{exp.backtrace.join('\n')}", :error)
       raise Exception(exp.message)
     end
-
+    
     #All done!
     return [:notice, "Product data was successfully imported."]
   end
-
-
+  
+  
   private
   
   
@@ -157,8 +157,12 @@ class LizenzoImport < ActiveRecord::Base
     # into the product (including images and taxonomies). 
     # What this does is only assigns values to products if the product accepts that field.
     params_hash.each do |field, value|
-      product.send("#{field}=", value) if product.respond_to?("#{field}=")
+      value = convert_value_to_price(value) if field == :master_price
+      product.send("#{field}=", value.is_a?(String) ? value.force_encoding("UTF-8") : value) if product.respond_to?("#{field}=")
     end
+    
+    # using backup name col if name is nil.
+    product.name = params_hash[:backup_name].force_encoding("UTF-8") if product.name.nil?
     
     #We can't continue without a valid product here
     unless product.valid?
@@ -169,6 +173,9 @@ class LizenzoImport < ActiveRecord::Base
     
     #Just log which product we're processing
     log(product.name)
+    
+    # Setting tax class
+    product.tax_category_id = 1
     
     #This should be caught by code in the main import code that checks whether to create
     #variants or not. Since that check can be turned off, however, we should double check.
@@ -229,38 +236,41 @@ class LizenzoImport < ActiveRecord::Base
   
   
   ### MISC HELPERS ####
-
+  
   #Log a message to a file - logs in standard Rails format to logfile set up in the lizenzo_importer initializer
   #and console.
   #Message is string, severity symbol - either :info, :warn or :error
-
+  
   def log(message, severity = :info)
     @rake_log ||= ActiveSupport::BufferedLogger.new(LIZENZO_IMPORTER_SETTINGS[:log_to])
     message = "[#{Time.now.to_s(:db)}] [#{severity.to_s.capitalize}] #{message}\n"
     @rake_log.send severity, message
     puts message
   end
-
-
+  
+  
   ### IMAGE HELPERS ###
-
+  
   # find_and_attach_image_to
   # This method attaches images to products. The images may come 
   # from a local source (i.e. on disk), or they may be online (HTTP/HTTPS).
   def find_and_attach_image_to(product_or_variant, filename)
     return if filename.blank?
     
-    #The image can be fetched from an HTTP or local source - either method returns a Tempfile
-    file = filename =~ /\Ahttp[s]*:\/\// ? fetch_remote_image(filename) : fetch_local_image(filename)
+    # Fetching the image from life-trends server
+    filename = 'http://www.life-trends24.de/images/product_images/popup_images/' + filename
+    file = fetch_remote_image(filename)
+    
     #An image has an attachment (the image file) and some object which 'views' it
-    product_image = Image.new({:attachment => file,
-                              :viewable => product_or_variant,
-                              :position => product_or_variant.images.length
-                              })
-
+    product_image = Image.new({
+      :attachment => file,
+      :viewable => product_or_variant,
+      :position => product_or_variant.images.length
+    })
+    
     product_or_variant.images << product_image if product_image.save
   end
-
+  
   # This method is used when we have a set location on disk for
   # images, and the file is accessible to the script.
   # It is basically just a wrapper around basic File IO methods.
@@ -273,8 +283,8 @@ class LizenzoImport < ActiveRecord::Base
       return File.open(filename, 'rb')
     end
   end
-
-
+  
+  
   #This method can be used when the filename matches the format of a URL.
   # It uses open-uri to fetch the file, returning a Tempfile object if it
   # is successful.
@@ -289,9 +299,9 @@ class LizenzoImport < ActiveRecord::Base
       log("Image #{filename} could not be downloaded, so was not imported.")
     end
   end
-
+  
   ### TAXON HELPERS ###
-
+  
   # associate_product_with_taxon
   # This method accepts three formats of taxon hierarchy strings which will
   # associate the given products with taxons:
@@ -309,12 +319,12 @@ class LizenzoImport < ActiveRecord::Base
     taxonomy_name = taxonomy
     taxonomy = Taxonomy.find(:first, :conditions => ["lower(name) = ?", taxonomy])
     taxonomy = Taxonomy.create(:name => taxonomy_name.capitalize) if taxonomy.nil? && LIZENZO_IMPORTER_SETTINGS[:create_missing_taxonomies]
-  
+    
     taxon_hierarchy.split(/\s*\&\s*/).each do |hierarchy|
       hierarchy = hierarchy.split(/\s*>\s*/)
       last_taxon = taxonomy.root
       hierarchy.each do |taxon|
-        last_taxon = last_taxon.children.find_or_create_by_name_and_taxonomy_id(taxon, taxonomy.id)
+        last_taxon = last_taxon.children.find_or_create_by_name_and_taxonomy_id(taxon.force_encoding("UTF-8"), taxonomy.id)
       end
       
       #Spree only needs to know the most detailed taxonomy item
@@ -322,5 +332,9 @@ class LizenzoImport < ActiveRecord::Base
     end
   end
   ### END TAXON HELPERS ###
+  
+  def convert_value_to_price(value)
+    BigDecimal.new((value.to_f/10000).to_s, 10)
+  end
+  
 end
-
