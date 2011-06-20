@@ -258,8 +258,8 @@ class LizenzoImport < ActiveRecord::Base
     return if filename.blank?
     
     # Fetching the image from life-trends server
-    filename = 'http://www.life-trends24.de/images/product_images/popup_images/' + filename
-    file = fetch_remote_image(filename)
+    image_url = 'http://www.life-trends24.de/images/product_images/popup_images/' + filename
+    file = fetch_remote_image(image_url)
     
     #An image has an attachment (the image file) and some object which 'views' it
     product_image = Image.new({
@@ -292,7 +292,15 @@ class LizenzoImport < ActiveRecord::Base
   # If it fails altogether, it logs it and exits the method.
   def fetch_remote_image(filename)
     begin
-      open(filename)
+      extname = File.extname(filename)
+      basename = File.basename(filename, extname)
+      file = Tempfile.new([basename, extname])
+      file.binmode
+      open(URI.parse(filename)) do |data|
+        file.write data.read
+      end
+      file.rewind
+      return file
     rescue OpenURI::HTTPError => error
       log("Image #{filename} retrival returned #{error.message}, so this image was not imported")
     rescue
