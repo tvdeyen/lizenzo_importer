@@ -319,23 +319,33 @@ class LizenzoImport < ActiveRecord::Base
   # 3. An item > item & item > item will work as above, but will associate multiple
   # taxons with that product. This form should also work with format 1. 
   def associate_product_with_taxon(product, taxonomy, taxon_hierarchy)
-    return if product.nil? || taxonomy.nil? || taxon_hierarchy.nil?
-    #Using find_or_create_by_name is more elegant, but our magical params code automatically downcases 
+    return if product.nil? || taxonomy.nil?
+    # Using find_or_create_by_name is more elegant, but our magical params code automatically downcases 
     # the taxonomy name, so unless we are using MySQL, this isn't going to work.
-    taxonomy_name = taxonomy
+    taxonomy_name = taxonomy.force_encoding("UTF-8")
     
     taxonomy = Taxonomy.find(:first, :conditions => ["lower(name) = ?", taxonomy])
     taxonomy = Taxonomy.create(:name => taxonomy_name.capitalize) if taxonomy.nil? && LIZENZO_IMPORTER_SETTINGS[:create_missing_taxonomies]
     
-    taxon_hierarchy.split(/\s*\&\s*/).each do |hierarchy|
-      hierarchy = hierarchy.split(/\s*>\s*/)
-      last_taxon = taxonomy.root
-      hierarchy.each do |taxon|
-        last_taxon = last_taxon.children.find_or_create_by_name_and_taxonomy_id(taxon.force_encoding("UTF-8"), taxonomy.id)
+    if taxon_hierarchy.blank?
+      
+      taxon_root = taxonomy.root
+      taxon = taxon_root.children.find_or_create_by_name_and_taxonomy_id(taxonomy.name, taxonomy.id)
+      product.taxons << taxon unless product.taxons.include?(taxon)
+      
+    else
+      
+      taxon_hierarchy.split(/\s*\&\s*/).each do |hierarchy|
+        hierarchy = hierarchy.split(/\s*>\s*/)
+        last_taxon = taxonomy.root
+        hierarchy.each do |taxon|
+          last_taxon = last_taxon.children.find_or_create_by_name_and_taxonomy_id(taxon.force_encoding("UTF-8"), taxonomy.id)
+        end
+        
+        #Spree only needs to know the most detailed taxonomy item
+        product.taxons << last_taxon unless product.taxons.include?(last_taxon)
       end
       
-      #Spree only needs to know the most detailed taxonomy item
-      product.taxons << last_taxon unless product.taxons.include?(last_taxon)
     end
   end
   ### END TAXON HELPERS ###
