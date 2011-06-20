@@ -185,11 +185,11 @@ class LizenzoImport < ActiveRecord::Base
       #Save the object before creating asssociated objects
       product.save
       
-      
       #Associate our new product with any taxonomies that we need to worry about
-      LIZENZO_IMPORTER_SETTINGS[:taxonomy_fields].each do |field| 
-        associate_product_with_taxon(product, field.to_s, params_hash[field.to_sym])
-      end
+      maincat = LIZENZO_IMPORTER_SETTINGS[:taxonomy_fields][0]
+      subcat = LIZENZO_IMPORTER_SETTINGS[:taxonomy_fields][1]
+      
+      associate_product_with_taxon(product, params_hash[maincat.to_sym], params_hash[subcat.to_sym])
       
       #Finally, attach any images that have been specified
       LIZENZO_IMPORTER_SETTINGS[:image_fields].each do |field|
@@ -233,7 +233,6 @@ class LizenzoImport < ActiveRecord::Base
     end
     mappings
   end
-  
   
   ### MISC HELPERS ####
   
@@ -284,7 +283,6 @@ class LizenzoImport < ActiveRecord::Base
     end
   end
   
-  
   #This method can be used when the filename matches the format of a URL.
   # It uses open-uri to fetch the file, returning a Tempfile object if it
   # is successful.
@@ -325,6 +323,7 @@ class LizenzoImport < ActiveRecord::Base
     #Using find_or_create_by_name is more elegant, but our magical params code automatically downcases 
     # the taxonomy name, so unless we are using MySQL, this isn't going to work.
     taxonomy_name = taxonomy
+    
     taxonomy = Taxonomy.find(:first, :conditions => ["lower(name) = ?", taxonomy])
     taxonomy = Taxonomy.create(:name => taxonomy_name.capitalize) if taxonomy.nil? && LIZENZO_IMPORTER_SETTINGS[:create_missing_taxonomies]
     
