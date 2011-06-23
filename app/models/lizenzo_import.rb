@@ -9,7 +9,7 @@ class LizenzoImport < ActiveRecord::Base
   has_attached_file :data_file, :path => ":rails_root/lib/etc/product_data/data-files/:basename.:extension"
   validates_attachment_presence :data_file
   
-  require 'csv'
+  require RUBY_VERSION == '1.8.7' ? 'fastercsv' : 'csv'
   require 'pp'
   require 'open-uri'
   
@@ -28,7 +28,11 @@ class LizenzoImport < ActiveRecord::Base
         @skus_of_products_before_import << product.sku
       end
       
-      rows = CSV.read(self.data_file.path, {:col_sep => ';', :quote_char => "'"})
+      if RUBY_VERSION == '1.8.7'
+        rows = FasterCSV.read(self.data_file.path, {:col_sep => ';', :quote_char => "'"})
+      else
+        rows = CSV.read(self.data_file.path, {:col_sep => ';', :quote_char => "'"})
+      end
       
       if LIZENZO_IMPORTER_SETTINGS[:first_row_is_headings]
         col = get_column_mappings(rows[0])
