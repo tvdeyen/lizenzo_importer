@@ -23,11 +23,10 @@ class LizenzoImport < ActiveRecord::Base
     begin
       #Get products *before* import -
       @products_before_import = Product.all
-      @names_of_products_before_import = []
+      @skus_of_products_before_import = []
       @products_before_import.each do |product|
-        @names_of_products_before_import << product.name
+        @skus_of_products_before_import << product.sku
       end
-      log("#{@names_of_products_before_import}")
       
       rows = CSV.read(self.data_file.path, {:col_sep => ';', :quote_char => "'"})
       
@@ -151,37 +150,47 @@ class LizenzoImport < ActiveRecord::Base
   # product we have gathered, and creating the product and related objects.
   # It also logs throughout the method to try and give some indication of process.
   def create_product_using(params_hash)
-    product = Product.new
     
-    #The product is inclined to complain if we just dump all params 
-    # into the product (including images and taxonomies). 
-    # What this does is only assigns values to products if the product accepts that field.
-    params_hash.each do |field, value|
-      value = convert_value_to_price(value) if field == :master_price
-      product.send("#{field}=", value.is_a?(String) ? value.force_encoding("UTF-8") : value) if product.respond_to?("#{field}=")
-    end
-    
-    # using backup name col if name is nil.
-    product.name = params_hash[:backup_name].force_encoding("UTF-8") if product.name.nil?
-    
-    #We can't continue without a valid product here
-    unless product.valid?
-      log("A product could not be imported - here is the information we have:\n" +
-          "#{pp params_hash}, :error")
-      return false
-    end
-    
-    #Just log which product we're processing
-    log(product.name)
-    
-    # Setting tax class
-    product.tax_category_id = 1
-    
-    #This should be caught by code in the main import code that checks whether to create
-    #variants or not. Since that check can be turned off, however, we should double check.
-    if @names_of_products_before_import.include? product.name
-      log("#{product.name} is already in the system.\n")
+    if variant = Variant.find_by_sku(params_hash[:sku])
+      # Updating if products already exists
+      product = variant.product
+      log("#{product.name} is already in the system. Updating.\n")
+      
+      params = params_hash.reject { |k, v| !LIZENZO_IMPORTER_SETTINGS[:fields_to_update].include? k }
+      params.each do |field, value|
+        if field == :cost_price
+          value = BigDecimal.new((value.to_s.gsub(/1:/, '').to_f).to_s)
+        end
+        product.send("#{field}=", value.is_a?(String) ? value.force_encoding("UTF-8") : value) if product.respond_to?("#{field}=")
+      end
+      
+      if product.save
+        log("#{product.name} successfully updated.\n")
+      end
+      
     else
+      product = Product.new
+      #The product is inclined to complain if we just dump all params 
+      # into the product (including images and taxonomies). 
+      # What this does is only assigns values to products if the product accepts that field.
+      params_hash.each do |field, value|
+        value = convert_value_to_price(value) if field == :master_price
+        product.send("#{field}=", value.is_a?(String) ? value.force_encoding("UTF-8") : value) if product.respond_to?("#{field}=")
+      end
+      
+      # using backup name col if name is nil.
+      product.name = params_hash[:backup_name].force_encoding("UTF-8") if product.name.nil?
+      
+      #We can't continue without a valid product here
+      unless product.valid?
+        log("A product could not be imported - here is the information we have:\n" +
+            "#{pp params_hash}, :error")
+        return false
+      end
+      
+      # Setting tax class
+      product.tax_category_id = 1
+      
       #Save the object before creating asssociated objects
       product.save
       
@@ -201,7 +210,7 @@ class LizenzoImport < ActiveRecord::Base
           store = Store.find(
             :first, 
             :conditions => ["id = ? OR code = ?", 
-              params_hash[LIZENZO_IMPORTER_SETTINGS[:store_field]], 
+              params_hash[LIZENZO_IMPORTER_SETTINGS[:store_field]],
               params_hash[LIZENZO_IMPORTER_SETTINGS[:store_field]]
             ]
           )
@@ -214,7 +223,9 @@ class LizenzoImport < ActiveRecord::Base
       
       #Log a success message
       log("#{product.name} successfully imported.\n")
+      
     end
+    
     return true
   end
   
@@ -351,7 +362,7 @@ class LizenzoImport < ActiveRecord::Base
   ### END TAXON HELPERS ###
   
   def convert_value_to_price(value)
-    BigDecimal.new((value.to_f/10000).to_s, 10)
+    BigDecimal.new((value.to_s.to_f/10000).to_s)
   end
   
 end

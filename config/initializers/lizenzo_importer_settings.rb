@@ -7,6 +7,7 @@ LIZENZO_IMPORTER_SETTINGS = {
     :name => 43,
     :backup_name => 54,
     :master_price => 8,
+    :cost_price => 14,
     :image_main => 42,
     :image_2 => 37,
     :image_3 => 38,
@@ -29,5 +30,6 @@ LIZENZO_IMPORTER_SETTINGS = {
   :create_variants => false, #Compares products and creates a variant if that product already exists.
   :variant_comparator_field => :permalink, #Which product field to detect duplicates on
   :multi_domain_importing => false, #If Spree's multi_domain extension is installed, associates products with store
-  :store_field => :store_code #Which field of the column mappings contains either the store id or store code?
+  :store_field => :store_code, #Which field of the column mappings contains either the store id or store code?
+  :fields_to_update => [:cost_price, :count_on_hand] #An array of symbols with cols that should be updated on existing products
 }
