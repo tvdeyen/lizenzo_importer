@@ -3,13 +3,9 @@ class LizenzoImporterHooks < Spree::ThemeSupport::HookListener
   
   Deface::Override.new(
     :virtual_path => "layouts/admin",
-    :name => "lizenzo_importer_tab",
+    :name => 'lizenzo_importer_tab',
     :insert_bottom => "[data-hook='admin_tabs']",
-    :text => "<%= tab(:lizenzo_imports) %>",
-    :disabled => false
+    :text => "<%= tab(:lizenzo_imports) %>"
   )
-  # 
-  # insert_after :admin_tabs do
-  #   %(<%= tab(:lizenzo_imports) %>)
-  # end
+  
 end
