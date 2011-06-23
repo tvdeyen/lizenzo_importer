@@ -165,7 +165,11 @@ class LizenzoImport < ActiveRecord::Base
         if field == :cost_price
           value = BigDecimal.new((value.to_s.gsub(/1:/, '').to_f).to_s)
         end
-        product.send("#{field}=", value.is_a?(String) ? value.force_encoding("UTF-8") : value) if product.respond_to?("#{field}=")
+        if RUBY_VERSION == '1.8.7'
+          product.send("#{field}=", value) if product.respond_to?("#{field}=")
+        else
+          product.send("#{field}=", value.is_a?(String) ? value.force_encoding("UTF-8") : value) if product.respond_to?("#{field}=")
+        end
       end
       
       if product.save
@@ -179,11 +183,19 @@ class LizenzoImport < ActiveRecord::Base
       # What this does is only assigns values to products if the product accepts that field.
       params_hash.each do |field, value|
         value = convert_value_to_price(value) if field == :master_price
-        product.send("#{field}=", value.is_a?(String) ? value.force_encoding("UTF-8") : value) if product.respond_to?("#{field}=")
+        if RUBY_VERSION == '1.8.7'
+          product.send("#{field}=", value) if product.respond_to?("#{field}=")
+        else
+          product.send("#{field}=", value.is_a?(String) ? value.force_encoding("UTF-8") : value) if product.respond_to?("#{field}=")
+        end
       end
       
       # using backup name col if name is nil.
-      product.name = params_hash[:backup_name].force_encoding("UTF-8") if product.name.nil?
+      if RUBY_VERSION == '1.8.7'
+        product.name = params_hash[:backup_name] if product.name.nil?
+      else
+        product.name = params_hash[:backup_name].force_encoding("UTF-8") if product.name.nil?
+      end
       
       #We can't continue without a valid product here
       unless product.valid?
@@ -337,7 +349,7 @@ class LizenzoImport < ActiveRecord::Base
     return if product.nil? || taxonomy.nil?
     # Using find_or_create_by_name is more elegant, but our magical params code automatically downcases 
     # the taxonomy name, so unless we are using MySQL, this isn't going to work.
-    taxonomy_name = taxonomy.force_encoding("UTF-8")
+    taxonomy_name = RUBY_VERSION == '1.8.7' ? taxonomy : taxonomy.force_encoding("UTF-8")
     
     taxonomy = Taxonomy.find(:first, :conditions => ["lower(name) = ?", taxonomy])
     taxonomy = Taxonomy.create(:name => taxonomy_name.capitalize) if taxonomy.nil? && LIZENZO_IMPORTER_SETTINGS[:create_missing_taxonomies]
@@ -354,7 +366,7 @@ class LizenzoImport < ActiveRecord::Base
         hierarchy = hierarchy.split(/\s*>\s*/)
         last_taxon = taxonomy.root
         hierarchy.each do |taxon|
-          last_taxon = last_taxon.children.find_or_create_by_name_and_taxonomy_id(taxon.force_encoding("UTF-8"), taxonomy.id)
+          last_taxon = last_taxon.children.find_or_create_by_name_and_taxonomy_id(RUBY_VERSION == '1.8.7' ? taxon : taxon.force_encoding("UTF-8"), taxonomy.id)
         end
         
         #Spree only needs to know the most detailed taxonomy item
