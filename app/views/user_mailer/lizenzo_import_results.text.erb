@@ -1,6 +1,6 @@
 Hello,
 
-<% if @error_message %>
+<% if @error %>
   Something went wrong during the product import.
   Common causes for this include:
   - Badly formatted CSV
@@ -11,7 +11,8 @@ Hello,
   Please check your file and try again.
   To help diagnose the problem, we have attached the log file for the imports.
   
-  This is the error message: <%= @error_message %>
+  This is the error message: <%= @error.message %>
+  <%= @error.backtrace.join('\n') %>
   
 <% else %>
   This is a quick email to let you know that the product import you submitted has been completed.
