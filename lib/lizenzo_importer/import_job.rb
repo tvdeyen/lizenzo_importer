@@ -12,12 +12,12 @@ module LizenzoImporter
       begin
         lizenzo_import = LizenzoImport.find(self.lizenzo_import_id)
         results = lizenzo_import.import_data!
-        UserMailer.lizenzo_import_results(User.find(self.user_id)).deliver
+        if UserMailer.lizenzo_import_results(User.find(self.user_id)).deliver
+          # clear log!
+          FileUtils.rm_f(LIZENZO_IMPORTER_SETTINGS[:log_to])
+        end
       rescue Exception => exp
-        UserMailer.lizenzo_import_results(User.find(self.user_id), exp).deliver
-      ensure
-        # clear log!
-        FileUtils.rm_f(LIZENZO_IMPORTER_SETTINGS[:log_to])
+        UserMailer.lizenzo_import_results(User.find(self.user_id), exp.message).deliver
       end
     end
   end
